@@ -17,16 +17,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     CMAKE_VERSION=3.28.0 \
-    NINJA_VERSION=1.11.1 \
     CUDA_HOME=${CUDA_HOME} \
     PATH=${CUDA_HOME}/bin:$PATH
 
-# 时区设置
-RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-    dpkg-reconfigure -f noninteractive tzdata
-
 # === 1. 安装系统依赖 ===
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     # 编译工具链
     build-essential \
     gcc \
@@ -40,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
     ca-certificates \
+    unzip \
     # SSL 和加密库
     libssl-dev \
     openssl \
@@ -60,6 +57,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmicrohttpd-dev \
     # WebSocket
     libwebsockets-dev \
+    # UUID（coreloopthree id_utils 依赖）
+    uuid-dev \
     # 开发工具
     pkg-config \
     gdb \
@@ -74,21 +73,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# === 2. 安装 CMake 最新版本 ===
+# 时区设置（必须在 tzdata 安装完成后执行）
+RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    dpkg-reconfigure -f noninteractive tzdata
+
+# === 2. 安装 CMake 最新版本（按架构下载） ===
 WORKDIR /tmp
-RUN wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz \
+ARG TARGETARCH
+RUN set -eux; \
+    case "$TARGETARCH" in \
+        amd64)  CMAKE_ARCH="x86_64" ;; \
+        arm64)  CMAKE_ARCH="aarch64" ;; \
+        *)      echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    wget -q https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-${CMAKE_ARCH}.tar.gz \
     && tar -xzf cmake-*.tar.gz \
-    && mv cmake-${CMAKE_VERSION}-linux-x86_64 /opt/cmake \
+    && mv cmake-${CMAKE_VERSION}-linux-${CMAKE_ARCH} /opt/cmake \
     && ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake \
     && ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest \
     && ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack \
     && rm -rf cmake-*
 
 # === 3. 安装 Ninja Build ===
-RUN wget https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/ninja-linux.zip \
-    && unzip ninja-linux.zip -d /usr/local/bin \
-    && chmod +x /usr/local/bin/ninja \
-    && rm ninja-linux.zip
+# ninja-build 已由 apt 在第 1 步安装（自动匹配架构），无需手动下载二进制
 
 # === 4. 设置工作目录 ===
 WORKDIR /workspace
@@ -123,25 +131,28 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     AGENTOS_ROOT=/opt/agentos \
-    PATH=/opt/agentos/bin:$PATH \
-    LD_LIBRARY_PATH=/opt/agentos/lib:$LD_LIBRARY_PATH
+    PATH=/opt/agentos/bin:$PATH
+
+ENV LD_LIBRARY_PATH=/opt/agentos/lib
 
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl3 \
-    libevent-2.1-7a \
+    tzdata \
+    libssl3t64 \
+    libevent-2.1-7t64 \
     libsqlite3-0 \
     libcjson1 \
-    libcurl4 \
+    libcurl4t64 \
     libyaml-0-2 \
-    libmicrohttpd12 \
-    libwebsockets19 \
+    libmicrohttpd12t64 \
+    libwebsockets19t64 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# 时区设置
+# 时区设置（必须在 tzdata 安装完成后执行）
 RUN ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
     dpkg-reconfigure -f noninteractive tzdata
 
 # 从构建阶段复制已安装的文件

@@ -26,6 +26,8 @@ set(SOURCES
     utils/memory/src/memory_pool.c
     utils/memory/src/memory_debug.c
     utils/memory/src/memory_common.c
+    utils/memory/src/memory_stats_reporter.c
+    utils/memory/src/memory_prealloc.c
     utils/string/src/string_common.c
     utils/string/src/string.c
     utils/sync/src/sync.c
