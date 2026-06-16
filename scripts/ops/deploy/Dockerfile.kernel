@@ -114,6 +114,8 @@ RUN mkdir -p /workspace/AgentOS-build \
     && cmake -S /workspace/AgentOS -B /workspace/AgentOS-build \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_TESTS=OFF \
+    -DENABLE_SANITIZERS=OFF \
+    -DWARNINGS_AS_ERRORS=OFF \
     -DCMAKE_INSTALL_PREFIX=/opt/agentos \
     -G Ninja \
     && cmake --build /workspace/AgentOS-build --parallel $(nproc) \

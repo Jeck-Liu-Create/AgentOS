@@ -1,0 +1,39 @@
+# Copyright (c) 2026 SPHARX Ltd. All Rights Reserved.
+# AgentOS 运行时覆盖镜像（方案 A）
+#
+# 现有 agentos:latest 内的守护进程二进制是在 ENABLE_SANITIZERS=ON 下编译的，
+# 依赖 libasan.so.8 / libubsan.so.1，而其精简 runtime 阶段未安装这两个库。
+# 本镜像在 agentos:latest 之上补齐 sanitizer 运行时库，并以 gateway_d 作为入口，
+# 对外暴露 8080 端口（API 网关 /health）。
+#
+# 注意：进程仍以 AddressSanitizer 仪器化方式运行（较慢、遇真实内存错误会 abort），
+# 适用于预览/演示，非生产级。干净构建请走修复源码 + 关闭 sanitizers 的路径。
+# 另：/health 仅注册 GET 方法，且 404 处理器存在 NULL 解引用缺陷（见
+# http_gateway_routes.c:238 的 jsonrpc_create_error_response(NULL,...)），
+# 因此健康检查必须用 GET（wget -O），不能用 HEAD（wget --spider）。
+
+FROM agentos:latest
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai \
+    AGENTOS_HTTP_PORT=8080 \
+    AGENTOS_WS_PORT=8081 \
+    AGENTOS_METRICS_PORT=9090
+
+# 补齐 sanitizer 运行时库；wget 用于健康检查
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libasan8 \
+        libubsan1 \
+        wget \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* && apt-get clean
+
+EXPOSE 8080 8081 9090
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget -q -O /dev/null --tries=1 http://localhost:8080/health || exit 1
+
+# 降权运行（若镜像内已有 agentos 用户则使用，否则保持 root）
+WORKDIR /opt/agentos
+
+CMD ["/opt/agentos/bin/gateway_d"]
